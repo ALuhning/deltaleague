@@ -57,6 +57,24 @@ Coding and BFCL use greedy, non-thinking generation capped at 4,096 tokens.
 The protocol seed is in the manifest. Private-test generation settings returned
 by an evaluation configuration are not substituted for public task settings.
 
+### Configuration-specific engine settings
+
+Some competitions declare their own engine settings in `generation.engine` of the
+evaluation configuration (`evaluation.json` after `delta competition init`): GPU
+memory fraction, KV-cache dtype and batch size, plus `max_model_len`. The
+platform serves every checkpoint of that competition with exactly these flags.
+Print the matching pinned command for your checkpoint:
+
+```sh
+delta public-eval serve-command --evaluation-config experiment/evaluation.json \
+  --model-dir /absolute/path/to/model
+```
+
+For the Qwen 3.8 · 27B NVFP4 competition (`qwen38-27b-nvfp4-ref`) this serves the
+NVIDIA NVFP4 checkpoint on one 32 GB RTX 5090 with `--max-model-len 65536
+--gpu-memory-utilization 0.93 --max-num-seqs 64 --kv-cache-dtype fp8`. The
+container port is published on 127.0.0.1 only.
+
 ## Evaluate
 
 Use the 64-character model content hash from `delta model pull` metadata for the
@@ -347,3 +365,41 @@ Calibration, 2026-11-12, `Qwen/Qwen3.5-0.8B` at revision `2fc06364…` (BF16), o
 | Scoring time | 188 s (≈55,600 scored tokens/s), plus 58 s engine startup |
 
 A Transformers forward pass on 40 sampled documents (23,073 targets) agreed to within 0.0008 nats per token.
+
+## Agentic workspace track
+
+The Qwen 3.8 · 27B NVFP4 competition's private test is an agentic track: each
+task is a multi-turn episode in a read-only document workspace. The tools,
+action protocol and grader are public; the tasks and expected answers are not.
+
+- Tools (`delta_cli/public_eval/agentic_runtime.py`): `read`, `search`,
+  `query` (paginated table rows) and `calculate` (a bounded arithmetic
+  expression interpreter; no imports, attributes, assignment, filesystem or
+  network). The file is pinned by SHA-256 and the runner refuses a modified copy.
+- Protocol (`agentic.py`): the system prompt lists the tools. Each assistant
+  turn must be one JSON object: a tool call `{"tool": ..., "arguments": {...}}`,
+  up to 8 independent calls `{"calls": [...]}`, or `{"final": {...}}`. Tool
+  results return as the next user message; invalid actions get a protocol error
+  and the episode continues. Thinking is enabled and stripped from history.
+- Budgets come with each task: maximum turns, tool calls, tokens per turn and
+  total generated tokens (thinking included). Exhausting one, overflowing the
+  served context or never answering scores 0. Server errors fail the run
+  instead of scoring.
+- Grading: exact structured match of the final answer (key order ignored;
+  booleans never equal numbers). No tool sequence is required.
+- Sampling: the configuration's settings (temperature 1.0, top-p 0.95, top-k 20,
+  presence penalty 1.5).
+
+Run the same loop on your own tasks against a served checkpoint:
+
+```sh
+delta public-eval agentic --tasks my-tasks.json \
+  --evaluation-config experiment/evaluation.json \
+  --endpoint http://127.0.0.1:8000/v1 --output agentic-run-1
+```
+
+`my-tasks.json` is a list of objects with `prompt`, `workspace.documents`,
+`budget` (`max_turns`, `max_tool_calls`, `max_tokens_per_turn`,
+`max_generated_tokens`) and, to grade, `answer`. Documents are
+`{"kind": "document", "title": ..., "content": ...}` or
+`{"kind": "table", "title": ..., "rows": [...]}`, keyed by reference, starting at `entry`.
