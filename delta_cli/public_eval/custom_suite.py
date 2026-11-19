@@ -1,4 +1,4 @@
-"""Run user-supplied text, Python and Harbor tasks through the public adapters.
+"""Run user-supplied text, Python, Harbor and agentic workspace tasks through the public adapters.
 
 No dataset, checkpoint scheduling, credentials or publication policy lives here.
 The caller must be trusted with reference answers; candidate code stays sandboxed.
@@ -17,7 +17,14 @@ def evaluate_item(task, *, endpoint, generation, seed, root, tokenizer, harbor_r
     started = time.monotonic()
     row = {'id': task['id'], 'track': task['track'], 'state': 'complete'}
     evidence = {}
-    if task['track'] == 'terminal':
+    if task['track'] == 'agentic':
+        from .agentic import run_episode
+        if 'answer' not in task:
+            raise ValueError('Agentic scoring requires the trusted expected answer')
+        episode, evidence = run_episode(task, endpoint=endpoint, generation=generation, seed=seed)
+        if inference_finished:inference_finished()
+        row.update({k: v for k, v in episode.items() if k not in ('id', 'track', 'state')})
+    elif task['track'] == 'terminal':
         from .custom_tasks import bounded_agent_endpoint
         from .terminal import trial_config, trial_name, valid_reward, task_evidence
         from .native_trial import run_trial_isolated

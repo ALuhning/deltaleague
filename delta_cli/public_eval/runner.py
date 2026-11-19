@@ -20,6 +20,23 @@ def load_suite(path=None):
     return suite
 
 
+def serve_args(generation=None):
+    """vLLM server flags for an evaluation configuration, identical to the platform worker.
+
+    `generation.engine` (memory fraction, KV-cache dtype, batch size) is declared per
+    configuration; configurations without it use the historical engine.
+    """
+    generation = generation or {}
+    engine = generation.get('engine') or {}
+    args = ['--language-model-only', '--dtype', 'bfloat16',
+            '--max-model-len', str(generation.get('max_model_len', 34816)),
+            '--gpu-memory-utilization', str(engine.get('gpu_memory_utilization', .85)),
+            '--max-num-seqs', str(int(engine.get('max_num_seqs', 32)))]
+    if engine.get('kv_cache_dtype'):
+        args += ['--kv-cache-dtype', str(engine['kv_cache_dtype'])]
+    return args + ['--no-enable-log-requests']
+
+
 def configuration():
     root = Path(__file__).parent
     suite = manifest()

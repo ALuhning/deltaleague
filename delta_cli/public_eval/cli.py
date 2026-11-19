@@ -14,6 +14,58 @@ def config_command():
     typer.echo(json.dumps(configuration(), indent=2))
 
 
+@app.command('serve-command')
+def serve_command(evaluation_config: Path = typer.Option(..., help='evaluation.json from `delta competition init`'),
+                  model_dir: Path = typer.Option(..., help='Absolute path of the checkpoint directory to serve'),
+                  port: int = typer.Option(8000, min=1, max=65535)):
+    """Print the exact pinned vLLM command for a competition configuration (published on localhost only)."""
+    from .runner import serve_args
+    config = json.loads(evaluation_config.read_text())
+    image = json.loads((Path(__file__).parent / 'data/runtime.json').read_text())['vllm_base_image']
+    args = ['docker', 'run', '--rm', '--gpus', 'all', '--ipc=host', '-p', f'127.0.0.1:{port}:{port}',
+            '-v', f'{model_dir.resolve()}:/model:ro', '--entrypoint', 'python3', image,
+            '-m', 'vllm.entrypoints.openai.api_server', '--model', '/model', '--served-model-name', 'candidate',
+            '--host', '0.0.0.0', '--port', str(port), *serve_args(config.get('generation'))]
+    import shlex
+    typer.echo(shlex.join(args))
+
+
+@app.command('agentic')
+def agentic_command(tasks: Path = typer.Option(..., help='JSON list of agentic tasks (prompt, workspace, budget, optional answer)'),
+                    endpoint: str = typer.Option('http://127.0.0.1:8000/v1', help='OpenAI-compatible endpoint, ending in /v1'),
+                    output: Path = typer.Option(Path('agentic-results'), help='New output directory'),
+                    evaluation_config: Path | None = typer.Option(None, help='evaluation.json supplying the competition generation settings'),
+                    seed: int = typer.Option(20261115),
+                    concurrency: int = typer.Option(16, min=1, max=256)):
+    """Run agentic workspace episodes with the competition tools, loop and grader."""
+    from .agentic import run_episode
+    rows_in = json.loads(tasks.read_text())
+    if not isinstance(rows_in, list) or not rows_in:
+        raise typer.BadParameter('Expected a nonempty JSON list of tasks')
+    config = json.loads(evaluation_config.read_text()) if evaluation_config else {}
+    generation = {k: v for k, v in config.get('generation', {}).items()
+                  if k in ('temperature', 'top_p', 'top_k', 'presence_penalty', 'repetition_penalty', 'min_p', 'enable_thinking')}
+    generation = generation or {'temperature': 1.0, 'top_p': .95, 'top_k': 20, 'presence_penalty': 1.5, 'enable_thinking': True}
+    output.mkdir(parents=True, exist_ok=False)
+    url = endpoint.rstrip('/') + '/chat/completions'
+    import concurrent.futures
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as pool:
+        futures = [pool.submit(run_episode, {**t, 'id': t.get('id', str(i))}, endpoint=url, generation=generation, seed=seed)
+                   for i, t in enumerate(rows_in)]
+        for done, future in enumerate(concurrent.futures.as_completed(futures), 1):
+            results.append(future.result())
+            typer.echo(f'Agentic episodes: {done}/{len(futures)}', err=True)
+    rows = sorted((r for r, _ in results), key=lambda r: str(r['id']))
+    (output / 'episodes.jsonl').write_text(''.join(json.dumps({'row': r, **e}) + '\n' for r, e in results))
+    graded = [r for r in rows if 'passed' in r]
+    summary = {'episodes': len(rows), 'graded': len(graded), 'passed': sum(r['passed'] for r in graded),
+               'score_percent': 100 * sum(r['passed'] for r in graded) / len(graded) if graded else None,
+               'generation': generation, 'seed': seed, 'local_only': True}
+    (output / 'summary.json').write_text(json.dumps({**summary, 'rows': rows}, indent=2))
+    typer.echo(json.dumps(summary, indent=2))
+
+
 @app.command('run')
 def run_command(endpoint: str = typer.Option(..., help='OpenAI-compatible vLLM endpoint, ending in /v1'),
                 model: str = typer.Option('candidate', help='Name of the checkpoint served at the endpoint'),
