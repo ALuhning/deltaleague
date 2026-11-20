@@ -79,6 +79,10 @@ def test_cli_init_copies_baseline(tmp_path):
     out = tmp_path / 'mine'
     assert CliRunner().invoke(app, ['bundle', 'init', str(out), '--parent', str(parent)]).exit_code == 0
     assert {p.name for p in out.iterdir()} == {'delta_model.py', 'config.json', 'tokenizer.json', 'model.safetensors'}
+    assert 'transformers' in (out / 'delta_model.py').read_text()
+    assert CliRunner().invoke(app, ['bundle', 'init', str(tmp_path / 'v'), '--parent', str(parent),
+                                    '--template', 'vllm']).exit_code == 0
+    assert 'vllm' in (tmp_path / 'v' / 'delta_model.py').read_text()
 
 
 def test_vm_worker_runs_harness_and_reports(honest, tmp_path):

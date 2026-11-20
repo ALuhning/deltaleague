@@ -20,19 +20,20 @@ def _stderr(target):
     return None if target == 'inherit' else (target if target is not None else subprocess.DEVNULL)
 
 
-def local_launcher(bundle, device='cpu', python=None, stderr=None):
+def local_launcher(bundle, device='cpu', python=None, stderr=None, env=None):
     bundle = os.path.abspath(bundle)
 
     def launch(phase):
         scratch = tempfile.mkdtemp(prefix=f'delta-arch-{phase}-')
-        env = {'PATH': os.environ.get('PATH', ''), 'HOME': scratch, 'TMPDIR': scratch,
+        child = {'PATH': os.environ.get('PATH', ''), 'HOME': scratch, 'TMPDIR': scratch,
                'HF_HUB_OFFLINE': '1', 'TRANSFORMERS_OFFLINE': '1', 'PYTHONHASHSEED': '0'}
         for name in ('CUDA_VISIBLE_DEVICES', 'LD_LIBRARY_PATH'):
             if name in os.environ:
-                env[name] = os.environ[name]
+                child[name] = os.environ[name]
+        child.update(env or {})
         return subprocess.Popen([python or sys.executable, *INNER, '--bundle', bundle, '--device', device],
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                stderr=_stderr(stderr), env=env, cwd=scratch)
+                                stderr=_stderr(stderr), env=child, cwd=scratch)
     return launch
 
 

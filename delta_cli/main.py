@@ -356,11 +356,14 @@ def inspect(path: Path):
 
 
 @bundle_app.command("init")
-def bundle_init(output: Path, parent: Path | None = typer.Option(None, help="A `delta model pull` directory to copy config, tokenizer and weights from.")):
-    """Scaffold a bundle from the baseline delta_model.py."""
-    from .arch.bundle import init
+def bundle_init(output: Path, parent: Path | None = typer.Option(None, help="A `delta model pull` directory to copy config, tokenizer and weights from."),
+                template: str = typer.Option("torch", help="torch: editable PyTorch model; vllm: the official baseline engine.")):
+    """Scaffold a bundle from a baseline delta_model.py."""
+    from .arch.bundle import init, TEMPLATES
+    if template not in TEMPLATES:
+        raise typer.BadParameter("template must be torch or vllm")
     try:
-        init(output, parent)
+        init(output, parent, template)
     except (OSError, ValueError) as exc:
         raise typer.BadParameter(str(exc)) from None
     typer.echo(f"Bundle scaffolded in {output}. Edit delta_model.py, then run `delta bundle check {output}`.")

@@ -60,7 +60,7 @@ class Limits:
     flops_probe_tokens: int = 4096
     max_vocab: int = 1 << 21
     max_context: int = 1 << 20
-    request_tokens: int = 1 << 18
+    request_tokens: int = 1 << 20
     encode_chars: int = 4 << 20
     audit_batch: int = 16
 

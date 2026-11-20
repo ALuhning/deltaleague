@@ -49,17 +49,27 @@ def check_safetensors(root, artifacts, finite=True):
                     raise ValueError(f'non-finite tensor: {key}')
 
 
-def init(output, parent=None):
-    """Scaffold a bundle from the baseline code, copying a pulled parent's config, tokenizer and weights."""
+TEMPLATES = {'torch': 'delta_model_hf.py', 'vllm': 'delta_model.py'}
+
+
+def init(output, parent=None, template='torch'):
+    """Scaffold a bundle from a baseline template, copying a pulled parent's config, tokenizer and weights.
+
+    ``torch`` is plain PyTorch/transformers code to change the architecture;
+    ``vllm`` is the official baseline (the same weights served by vLLM).
+    """
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
-    shutil.copy(package_files('delta_cli.arch.baseline') / 'delta_model.py', output / 'delta_model.py')
+    shutil.copy(package_files('delta_cli.arch.baseline') / TEMPLATES[template], output / 'delta_model.py')
     if parent:
         parent = Path(parent)
-        for name in BASELINE_ASSETS:
-            shutil.copy(parent / name, output / name)
-        for weights in sorted(parent.glob('*.safetensors')):
-            shutil.copy(weights, output / weights.name)
+        for path in sorted(parent.iterdir()):
+            if (path.is_file() and path.name.endswith(BUNDLE_SUFFIXES) and not path.name.endswith('.py')
+                    and path.name not in BUNDLE_RESERVED and path.name != 'delta-model.json'):
+                shutil.copy(path, output / path.name)
+        missing = [n for n in BASELINE_ASSETS if not (output / n).exists()]
+        if missing:
+            raise ValueError('parent lacks ' + ', '.join(missing))
     return output
 
 

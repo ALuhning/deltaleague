@@ -188,7 +188,7 @@ def test_qwen_baseline_bundle_runs_and_audits(tmp_path):
         pytest.skip('Qwen3.5 tokenizer not cached')
     root = tmp_path / 'qwen'
     root.mkdir()
-    shutil.copy(files('delta_cli.arch.baseline') / 'delta_model.py', root / 'delta_model.py')
+    shutil.copy(files('delta_cli.arch.baseline') / 'delta_model_hf.py', root / 'delta_model.py')
     shutil.copy(tokenizers[0], root / 'tokenizer.json')
     text = dict(vocab_size=248320, hidden_size=32, intermediate_size=64, num_hidden_layers=4,
                 num_attention_heads=2, num_key_value_heads=1, head_dim=16, linear_num_value_heads=2,
@@ -205,3 +205,16 @@ def test_qwen_baseline_bundle_runs_and_audits(tmp_path):
     # A random model is near-uniform over the vocabulary.
     split = result['splits']['validation']
     assert split['nats_per_token'] == pytest.approx(math.log(248320), rel=0.05)
+
+
+def test_unpadded_score_windows_path(tmp_path):
+    # Engines that batch internally (the vLLM baseline) implement score_windows.
+    override = ('def score_windows(self, inputs, targets):\n'
+                '    out = []\n'
+                '    for x, y in zip(inputs, targets):\n'
+                '        lp = self.logits(torch.tensor(x)).log_softmax(-1)\n'
+                '        out.append(lp[range(len(y)), y].tolist())\n'
+                '    return out')
+    result = run(bundle(tmp_path, 'windows', override))
+    assert result['splits']['validation']['nll_sum_nats'] == pytest.approx(reference_nll(DOCS), rel=1e-5)
+    assert result['audit']['max_abs_deviation'] < 1e-4

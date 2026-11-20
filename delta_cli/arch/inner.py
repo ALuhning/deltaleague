@@ -40,6 +40,14 @@ def _score(model, hello, device, lengths, ids):
     import torch
     half = len(ids) // 2
     inputs, targets = split(ids[:half], lengths), split(ids[half:], lengths)
+    windows = getattr(model, 'score_windows', None)
+    if callable(windows):
+        # Engines that batch internally take unpadded windows in one call.
+        import array
+        rows = windows(inputs, targets)
+        if len(rows) != len(lengths) or any(len(r) != n for r, n in zip(rows, lengths)):
+            raise ValueError('score_windows shape')
+        return b''.join(array.array('f', [float(v) for v in r]).tobytes() for r in rows)
     order = sorted(range(len(lengths)), key=lambda i: -lengths[i])
     claims, batch = [None] * len(lengths), []
 

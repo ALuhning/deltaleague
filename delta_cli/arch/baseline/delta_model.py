@@ -1,52 +1,43 @@
-"""Baseline bundle: Qwen3.5 0.8B text model through transformers, no remote code.
+"""Baseline bundle: Qwen3.5 0.8B served by vLLM inside the sandbox (no network).
 
-Bundle layout: this file, ``config.json``, ``tokenizer.json`` and one or more
-``*.safetensors`` files with the released ``model.language_model.*`` keys (the
-vision tower is ignored). Start your own architecture by editing this file.
+Bundle layout: this file, the model's ``config.json`` and tokenizer files, and
+the released ``*.safetensors`` weights. vLLM scores whole windows with prompt
+log-probabilities. ``VLLM_BATCH_INVARIANT`` makes every position's numbers
+independent of batch composition and prefix length, so the audit's prefix-only
+recomputation reproduces the scoring run exactly.
+
+``delta_model_hf.py`` is the same model in plain PyTorch/transformers, a
+starting point for architecture changes.
 """
 import json
+import os
 from pathlib import Path
 
-import torch
-from safetensors.torch import load_file
-from tokenizers import Tokenizer
-from transformers.models.qwen3_5.configuration_qwen3_5 import Qwen3_5TextConfig
-from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5ForCausalLM
+os.environ.setdefault('VLLM_BATCH_INVARIANT', '1')
+os.environ.setdefault('VLLM_NO_USAGE_STATS', '1')
+os.environ.setdefault('DO_NOT_TRACK', '1')
 
-from delta_cli.arch.helpers import gather_logprobs, last_logits
-
-PREFIX = 'model.language_model.'
+import torch  # noqa: E402
+from tokenizers import Tokenizer  # noqa: E402
 
 
 class Model:
     max_context = 32768
-    batch_tokens = 65536
+    gpu_memory_utilization = 0.70  # prompt log-probabilities need logits memory outside the KV budget
 
     def __init__(self, bundle, device):
+        from vllm import LLM
         root = Path(bundle)
         config = json.loads((root / 'config.json').read_text())
-        text = Qwen3_5TextConfig(**config.get('text_config', config))
-        dtype = torch.bfloat16 if device != 'cpu' else torch.float32
-        with torch.device(device):
-            model = Qwen3_5ForCausalLM(text).to(dtype)
-        state = {}
-        for path in sorted(root.glob('*.safetensors')):
-            for key, value in load_file(str(path), device=device).items():
-                if key.startswith(PREFIX):
-                    state['model.' + key[len(PREFIX):]] = value
-                elif key == 'lm_head.weight':
-                    state[key] = value
-        missing, unexpected = model.load_state_dict(state, strict=False)
-        if unexpected or set(missing) - ({'lm_head.weight'} if text.tie_word_embeddings else set()):
-            raise ValueError('Checkpoint does not match config')
-        if text.tie_word_embeddings:
-            model.tie_weights()
-        self.model = model.eval()
+        text = config.get('text_config', config)
+        self.vocab_size = text['vocab_size']
+        self.eos_id = self.bos_id = text['eos_token_id']  # <|endoftext|> frames each document
         # Byte-level BPE without Qwen's NFC normalizer is exactly invertible.
         self.tokenizer = Tokenizer.from_file(str(root / 'tokenizer.json'))
         self.tokenizer.normalizer = None
-        self.vocab_size = text.vocab_size
-        self.eos_id = self.bos_id = text.eos_token_id  # <|endoftext|> frames each document
+        self.llm = LLM(model=str(root), dtype='bfloat16', trust_remote_code=False, language_model_only=True,
+                       skip_tokenizer_init=True, max_model_len=self.max_context + 2, enable_prefix_caching=False,
+                       gpu_memory_utilization=self.gpu_memory_utilization, max_logprobs=-1, seed=0)
 
     def encode(self, text):
         return self.tokenizer.encode(text, add_special_tokens=False).ids
@@ -54,11 +45,31 @@ class Model:
     def decode(self, ids):
         return self.tokenizer.decode(list(ids), skip_special_tokens=False)
 
-    def _hidden(self, ids):
-        return self.model.model(input_ids=ids, use_cache=False).last_hidden_state
+    def score_windows(self, inputs, targets):
+        """Unpadded windows -> per-target log-probabilities, one engine call for the whole batch."""
+        from vllm import SamplingParams
+        from vllm.inputs import TokensPrompt
+        prompts = [TokensPrompt(prompt_token_ids=list(x) + [y[-1]]) for x, y in zip(inputs, targets)]
+        params = SamplingParams(max_tokens=1, prompt_logprobs=0, detokenize=False, temperature=0)
+        out = []
+        for result, ids in zip(self.llm.generate(prompts, params, use_tqdm=False), prompts):
+            tokens = ids['prompt_token_ids']
+            entries = result.prompt_logprobs
+            out.append([entries[i][tokens[i]].logprob for i in range(1, len(tokens))])
+        return out
 
     def token_logprobs(self, ids, targets):
-        return gather_logprobs(self._hidden(ids), self.model.lm_head.weight, targets)
+        # Padded fallback; the runner prefers score_windows.
+        rows = self.score_windows(ids.tolist(), targets.tolist())
+        return torch.tensor(rows, dtype=torch.float32)
 
     def next_logits(self, ids):
-        return last_logits(self._hidden(ids), self.model.lm_head.weight)
+        from vllm import SamplingParams
+        from vllm.inputs import TokensPrompt
+        params = SamplingParams(max_tokens=1, logprobs=self.vocab_size, detokenize=False, temperature=0)
+        result = self.llm.generate([TokensPrompt(prompt_token_ids=ids[0].tolist())], params, use_tqdm=False)[0]
+        entries = result.outputs[0].logprobs[0]
+        row = torch.full((self.vocab_size,), float('-inf'))
+        for token, entry in entries.items():
+            row[token] = entry.logprob
+        return row[None]
