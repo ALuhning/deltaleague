@@ -44,6 +44,10 @@ Open the authorization URL in a browser and sign in with GitHub. `delta login` o
 
 If a transfer fails, rerun the same `delta submit` command. Version 0.1.2 saves `.delta-upload.json` before uploading and retries unfinished files using the same session. Keep this file private: while a transfer is pending, it contains signed upload URLs. Unfinished sessions expire after one hour; a later retry creates a new session. The two-session upload limit is separate from the submission quota shown by `delta quota`. Uploads use only manifest artifact names, reject redirects and other non-2xx responses, and retain retry state on transfer failure. Once submission starts, retry with the original title: the server may already have finalized the session even if its response was lost.
 
+## Architecture track
+
+Beyond weight edits, the architecture track accepts your own model code, weights and tokenizer as a bundle. It is scored on tokenizer-free validation loss (bits per byte) under a time and FLOPs budget. See [ARCHITECTURE_TRACK.md](ARCHITECTURE_TRACK.md) and `delta bundle --help`.
+
 ## Pinned public evaluation
 
 For the current `delta-public-v1` suite, use `delta public-eval run` with the

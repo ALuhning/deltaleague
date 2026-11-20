@@ -24,11 +24,13 @@ model_app = typer.Typer()
 patch_app = typer.Typer()
 submission_app = typer.Typer()
 competition_app = typer.Typer(help="Discover model competitions and initialize a reproducible workspace.")
+bundle_app = typer.Typer(help="Architecture track: submit model code, weights and tokenizer as a bundle.")
 app.add_typer(models_app, name="models")
 app.add_typer(model_app, name="model")
 app.add_typer(patch_app, name="patch")
 app.add_typer(submission_app, name="submission")
 app.add_typer(competition_app, name="competition")
+app.add_typer(bundle_app, name="bundle")
 app.add_typer(public_eval_app, name="public-eval")
 API = "https://deltaleague.ai"
 POLL_RETRIES = 5
@@ -351,6 +353,68 @@ def patch_build(parent: Path = typer.Option(...), modified: Path = typer.Option(
 @patch_app.command("inspect")
 def inspect(path: Path):
     show(json.loads((path / "manifest.json").read_text()))
+
+
+@bundle_app.command("init")
+def bundle_init(output: Path, parent: Path | None = typer.Option(None, help="A `delta model pull` directory to copy config, tokenizer and weights from.")):
+    """Scaffold a bundle from the baseline delta_model.py."""
+    from .arch.bundle import init
+    try:
+        init(output, parent)
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from None
+    typer.echo(f"Bundle scaffolded in {output}. Edit delta_model.py, then run `delta bundle check {output}`.")
+
+
+@bundle_app.command("build")
+def bundle_build(path: Path, model: str = typer.Option(..., help="Architecture-track model id."),
+                 parent: str | None = typer.Option(None, help="Checkpoint this bundle derives from (lineage only).")):
+    """Write manifest.json for a bundle directory."""
+    from .arch.bundle import build_manifest, identity
+    try:
+        manifest = build_manifest(path, model, parent)
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from None
+    typer.echo(f"Bundle {identity(manifest)[:12]}: {len(manifest['artifacts'])} files. Submit with `delta submit {path}`.")
+
+
+@bundle_app.command("check")
+def bundle_check(path: Path, docs: Path | None = typer.Option(None, help="JSONL documents ({\"text\": ...}); default: FineWeb validation."),
+                 limit: int = typer.Option(200, help="Documents to score."),
+                 device: str = typer.Option("cuda", help="Torch device for the runner."),
+                 audits: int = typer.Option(200, help="Audited positions."),
+                 time_limit: float | None = typer.Option(None, help="Scoring time limit in seconds."),
+                 flops_cap: float | None = typer.Option(None, help="FLOPs-per-token cap."),
+                 json_output: bool = typer.Option(False, "--json")):
+    """Run the official harness locally: score, audit, FLOPs probe and round-trip.
+
+    Local runs are not sandboxed and the runner may keep state between phases;
+    official scoring uses fresh, network-less containers on a private test set.
+    """
+    from .arch.bundle import load_docs, fineweb_docs
+    from .arch.harness import ArchEvalError, ERRORS, Limits, evaluate
+    from .arch.sandbox import local_launcher
+    try:
+        documents = load_docs(docs, limit) if docs else fineweb_docs(limit)
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from None
+    limits = Limits(time_limit_seconds=time_limit, audit_count=audits, flops_per_token_cap=flops_cap)
+    try:
+        result = evaluate(local_launcher(path, device, stderr="inherit"), {"validation": documents}, limits)
+    except ArchEvalError as exc:
+        if json_output:
+            typer.echo(json.dumps({"error": exc.code, "detail": exc.detail, **exc.stats}, indent=2))
+        fail(f"{exc.code}: {ERRORS.get(exc.code, '')} {exc.detail}".strip())
+    if json_output:
+        typer.echo(json.dumps(result, indent=2))
+        return
+    split, audit = result["splits"]["validation"], result["audit"]
+    typer.echo(f"bits/byte {split['bits_per_byte']:.5f} · nats/token {split['nats_per_token']:.4f}"
+               + (f" · loss/GPT-2 token {split['loss_per_gpt2_token']:.4f}" if split.get("loss_per_gpt2_token") else ""))
+    typer.echo(f"scored {split['targets']} tokens over {split['documents']} documents in {result['score_seconds']:.1f}s")
+    typer.echo(f"audit {audit['count']} positions · max |dev| {audit['max_abs_deviation']:.2e} · "
+               f"bias penalty {audit['penalty_nats_per_token']:.2e} nats/token")
+    typer.echo(f"FLOPs/token {result['flops_per_token']:.4g} (PyTorch dispatcher count) · round-trip ok")
 
 
 @app.command()
