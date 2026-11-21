@@ -9,8 +9,9 @@ There are two templates:
 
 ## Score
 
-- **Leaderboard score:** **bits per byte** (lower is better) on a private held-out set of web documents. Bits per byte is tokenizer-free: the total negative log-likelihood of the text divided by its UTF-8 size, so any tokenizer competes fairly.
-- **Validation score:** bits per byte on the leading documents of the public FineWeb window used by the modded-nanogpt speedrun. `loss_per_gpt2_token` on that window is also reported, for comparison with the speedrun scale.
+- **Units:** both scores are **nats per GPT-2 token** (lower is better), the NanoGPT speedrun's units (its target is 3.28). The total negative log-likelihood of the text under your model is divided by the number of GPT-2 tokens the same text has (each document's tokens plus its closing end-of-text). Your tokenizer only changes the numerator, so any tokenizer competes fairly. Bits per byte is reported alongside; it ranks identically, because the two differ by a fixed factor per dataset.
+- **Leaderboard score:** the private held-out set of web documents. Its GPT-2 count is computed by the platform with the pinned GPT-2 tokenizer (`openai-community/gpt2` vocab and merges, no special tokens).
+- **Validation score:** the public FineWeb validation window used by the speedrun (the first 10,485,760 GPT-2 tokens of `fineweb_val_000000.bin`), so this number is directly comparable with speedrun results.
 - **Document framing:** each document is scored independently. Your model predicts every token of the document and then your `eos_id`. A document longer than `max_context` is split into windows, and each window restarts from `bos_id`.
 
 ## Bundle contract
