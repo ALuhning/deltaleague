@@ -114,3 +114,16 @@ def test_vm_worker_runs_harness_and_reports(honest, tmp_path):
     files[0].update(sha256=hashlib.sha256(data).hexdigest(), size_bytes=len(data))
     bad = worker.run(spec, tmp_path / 'work4', launcher=local_launcher, probe=None, smoke=None)
     assert bad['status'] == 'rejected' and bad['code'] == 'invalid_tokens'
+
+
+def test_sandbox_smoke_command_keeps_image_and_lockdown(tmp_path):
+    from delta_cli.arch.worker import smoke_command, SMOKE
+    from delta_cli.arch.sandbox import docker_command
+    image = 'ghcr.io/x/delta-arch@sha256:' + 'c' * 64
+    spec = {'sandbox': {'image': image, 'runtime': 'runsc'}}
+    cmd = smoke_command(spec, tmp_path)
+    real = docker_command(image, tmp_path, 'delta-arch-smoke', runtime='runsc')
+    # Same flags and image as the scoring runner; only the program differs.
+    assert cmd[:real.index(image) + 1] == real[:real.index(image) + 1]
+    assert cmd[-3:] == [image, '-c', SMOKE] and cmd[cmd.index('--entrypoint') + 1] == 'python3'
+    assert '--network' in cmd and '--runtime' in cmd

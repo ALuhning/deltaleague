@@ -44,7 +44,10 @@ def docker_command(image, bundle, name, *, runtime=None, gpu='0', memory='64g', 
     command = ['docker', 'run', '--rm', '-i', '--name', name, '--network', 'none', '--read-only',
                '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', '65534:65534',
                '--pids-limit', str(pids), '--memory', memory, '--memory-swap', memory, '--shm-size', shm,
-               '--ipc', 'private', '--tmpfs', f'/tmp:rw,nosuid,nodev,size={tmpfs}',
+               # exec: Triton (vLLM, FLA) compiles and loads small .so stubs under /tmp. Docker
+               # tmpfs defaults to noexec; participant code is arbitrary anyway, so this
+               # adds no capability, and the container boundary is unchanged.
+               '--ipc', 'private', '--tmpfs', f'/tmp:rw,exec,nosuid,nodev,size={tmpfs}',
                '-e', 'HOME=/tmp', '-e', 'TMPDIR=/tmp', '-e', 'HF_HUB_OFFLINE=1', '-e', 'TRANSFORMERS_OFFLINE=1',
                '-e', 'PYTHONHASHSEED=0',
                '--mount', f'type=bind,src={os.path.abspath(bundle)},dst=/bundle,readonly',

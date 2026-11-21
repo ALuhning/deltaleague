@@ -168,7 +168,7 @@ def test_docker_command_is_locked_down(tmp_path):
     cmd = docker_command('registry/arch@sha256:' + 'a' * 64, tmp_path, 'n', runtime='runsc')
     joined = ' '.join(cmd)
     for flag in ('--network none', '--read-only', '--cap-drop ALL', 'no-new-privileges', '--user 65534:65534',
-                 'readonly', '--runtime runsc'):
+                 'readonly', '--runtime runsc', '/tmp:rw,exec,'):
         assert flag in joined
     with pytest.raises(ValueError):
         docker_command('registry/arch:latest', tmp_path, 'n')
