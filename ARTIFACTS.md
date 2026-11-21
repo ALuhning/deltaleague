@@ -32,7 +32,7 @@ A bundle replaces the whole model: code, weights and tokenizer. See [ARCHITECTUR
 {
   "schema_version": "delta.submission.v2",
   "format": "bundle",
-  "model_config_id": "qwen35-08b-arch",
+  "model_config_id": "1b-arch",
   "parent_version_id": "optional UUID, lineage only",
   "artifacts": [{"name": "delta_model.py", "sha256": "…", "size_bytes": 4096},
                 {"name": "model.safetensors", "sha256": "…", "size_bytes": 1700000000}]

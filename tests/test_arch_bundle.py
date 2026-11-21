@@ -21,12 +21,12 @@ def honest(tmp_path):
 
 
 def test_build_manifest_and_identity(honest):
-    manifest = build_manifest(honest, 'qwen35-08b-arch')
+    manifest = build_manifest(honest, '1b-arch')
     assert json.loads((honest / 'manifest.json').read_text()) == manifest
     validate_manifest(manifest)
     assert [a['name'] for a in manifest['artifacts']] == ['delta_model.py', 'extra.safetensors']
     # Rebuilding ignores the manifest itself; identity is the inventory.
-    assert bundle_hash(build_manifest(honest, 'qwen35-08b-arch')['artifacts']) == bundle_hash(manifest['artifacts'])
+    assert bundle_hash(build_manifest(honest, '1b-arch')['artifacts']) == bundle_hash(manifest['artifacts'])
     (honest / 'delta_model.py').write_text(HONEST + '\n# tweak\n')
     assert bundle_hash(scan(honest)) != bundle_hash(manifest['artifacts'])
 
@@ -65,7 +65,7 @@ def test_cli_check_and_build(honest, tmp_path):
                                  '--audits', '20', '--json'])
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)['audit']['failures'] == 0
-    result = runner.invoke(app, ['bundle', 'build', str(honest), '--model', 'qwen35-08b-arch'])
+    result = runner.invoke(app, ['bundle', 'build', str(honest), '--model', '1b-arch'])
     assert result.exit_code == 0 and (honest / 'manifest.json').exists()
     assert runner.invoke(app, ['validate', str(honest)]).exit_code == 0
 

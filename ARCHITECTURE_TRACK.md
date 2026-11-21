@@ -70,7 +70,7 @@ delta model pull <baseline-version-id> --output ./qwen        # weights, config,
 delta bundle init ./mine --parent ./qwen                       # PyTorch template (--template vllm: the baseline)
 # ... edit ./mine/delta_model.py, retrain or convert weights ...
 delta bundle check ./mine --limit 200                          # same harness, FineWeb validation
-delta bundle build ./mine --model qwen35-08b-arch
+delta bundle build ./mine --model 1b-arch
 delta submit ./mine --title 'Sliding-window mixer'
 ```
 
