@@ -1,6 +1,6 @@
 # Porting the 0.8B "3-in-1" closed-form edit to Qwen 3.8 · 27B NVFP4
 
-Status: variant A accepted by platform verification (submission `27f09fa9`) and queued for evaluation; B and C built, not submitted. No local accuracy evidence. This host has no GPU, and the NVFP4 checkpoint needs a Blackwell GPU to serve.
+Status: variant A scored **29.0 ± 2.6 private** (original 22.0) and **74.26 public validation** (original 73.34); it is rank 1 on the 27B board as of 2026-11-21. B and C are built and not submitted. No local accuracy evidence. This host has no GPU, and the NVFP4 checkpoint needs a Blackwell GPU to serve.
 
 ## Hypothesis
 
@@ -73,7 +73,17 @@ The build is deterministic with no seeds; patch hashes should match the table.
 
 ## Submission
 
-Variant A, second attempt: submission `27f09fa9-31fd-494a-a45e-8f169794969d`, submitted 2026-11-21 09:16 UTC after platform PR ilblackdragon/deltaleague-platform#33 was deployed. It passed verification in about 7 minutes and is queued for evaluation. No score yet.
+Variant A, second attempt: submission `27f09fa9-31fd-494a-a45e-8f169794969d`, submitted 2026-11-21 09:16 UTC after platform PR ilblackdragon/deltaleague-platform#33 was deployed. It passed verification in about 7 minutes and completed evaluation at 10:47 UTC.
+
+| | Private test (300 agentic episodes, 8K budget) | Public validation |
+| --- | ---: | ---: |
+| Original model | 22.00 | 73.34 |
+| Variant A | **29.00 ± 2.62** (87/300 passed) | **74.26** |
+| Difference | +7.00 | +0.92 |
+
+- Using only the two standard errors, the private gain is about 2.0 σ. The board's band treats rows as independent; a paired test on the shared 300 items would likely be tighter, but per-item results are not exposed.
+- The platform's reported `truncation_rate` is 0.0 with `output_tokens` 0. Those fields look unpopulated for this track, so the result does **not** confirm that the gain came from fewer budget-exhausted episodes. That mechanism remains a hypothesis.
+- Public validation changed little overall (+0.92); the per-benchmark scores are in the platform result. The sharper sampling did not visibly hurt the knowledge or coding benchmarks.
 
 Variant A, first attempt: submission `d1f5f3eb-7124-4508-a7f6-2acbb9762bfd`, **rejected (`artifact_invalid`)**; no score. The cause is below.
 
