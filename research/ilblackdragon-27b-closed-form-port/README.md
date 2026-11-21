@@ -1,6 +1,6 @@
 # Porting the 0.8B "3-in-1" closed-form edit to Qwen 3.8 · 27B NVFP4
 
-Status: three candidate patches built and verified; not yet submitted. No local accuracy evidence. This host has no GPU, and the NVFP4 checkpoint needs a Blackwell GPU to serve.
+Status: variant A accepted by platform verification (submission `27f09fa9`) and queued for evaluation; B and C built, not submitted. No local accuracy evidence. This host has no GPU, and the NVFP4 checkpoint needs a Blackwell GPU to serve.
 
 ## Hypothesis
 
@@ -73,8 +73,10 @@ The build is deterministic with no seeds; patch hashes should match the table.
 
 ## Submission
 
-Variant A: submission `d1f5f3eb-7124-4508-a7f6-2acbb9762bfd`, **rejected (`artifact_invalid`)**; no score.
+Variant A, second attempt: submission `27f09fa9-31fd-494a-a45e-8f169794969d`, submitted 2026-11-21 09:16 UTC after platform PR ilblackdragon/deltaleague-platform#33 was deployed. It passed verification in about 7 minutes and is queued for evaluation. No score yet.
 
-The platform rejected the submission 6 s after upload. Verification currently cannot handle any patch on this 21.9 GB parent: the CPU verifier downloads the parent under the default 4 GiB upload size limit (`artifact_size`). Its process limits (8 GiB file size, 16 GiB address space) are also below what a full 27B reconstruction needs. This is a platform limitation, not a defect of this patch; any 27B weight submission is affected, including variant C.
+Variant A, first attempt: submission `d1f5f3eb-7124-4508-a7f6-2acbb9762bfd`, **rejected (`artifact_invalid`)**; no score. The cause is below.
+
+The platform rejected the submission 6 s after upload. Verification currently cannot handle any patch on this 21.9 GB parent: the CPU verifier downloads the parent under the default 4 GiB upload size limit (`artifact_size`). Its process limits (8 GiB file size, 16 GiB address space) are also below what a full 27B reconstruction needs. At the time this was a platform limitation, not a defect of this patch; any 27B weight submission is affected, including variant C.
 
 A second, independent blocker: the competition accepts edits only to tensors under `model.language_model.`. `delta_cli.artifacts.reconstruct(..., allowed_prefix="model.language_model.")` raises `frozen_tensor` for A, because A changes `lm_head.weight_scale`; it accepts C. At 0.8B the output head is tied and covered by that prefix. At 27B the head is untied, so the output-logit half of the recipe (Wait/Hmm ×0.5, `</think>` ×1.3 on logit rows) is not currently admissible, and neither is variant B. Plain `delta validate` does not apply the prefix, so participants cannot see this before upload.
