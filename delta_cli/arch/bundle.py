@@ -98,3 +98,29 @@ def fineweb_docs(limit=None):
     return [{'text': d['text'], 'predicts_eos': d['predicts_eot'],
              'gpt2_targets': d['gpt2_tokens'] + int(d['predicts_eot'])} for d in docs]
 
+
+
+def domain_splits(docs, name):
+    """Documents tagged with ``domain`` become one split each (``name/domain``); untagged stay one split."""
+    if not any(d.get('domain') for d in docs):
+        return {name: docs}
+    groups = {}
+    for d in docs:
+        groups.setdefault(f"{name}/{d.get('domain') or 'other'}", []).append(d)
+    return dict(sorted(groups.items()))
+
+
+def pooled(splits, name):
+    """One metric over every ``name/*`` split (or ``name`` itself): totals add, ratios are recomputed."""
+    import math
+    parts = [m for k, m in splits.items() if k == name or k.startswith(name + '/')]
+    if not parts:
+        return None
+    nll = math.fsum(m['nll_sum_nats'] for m in parts)
+    out = {k: sum(m[k] for m in parts) for k in ('documents', 'targets', 'windows', 'utf8_bytes')}
+    out.update(nll_sum_nats=nll, nats_per_token=nll / out['targets'] if out['targets'] else None,
+               bits_per_byte=nll / math.log(2) / out['utf8_bytes'] if out['utf8_bytes'] else None)
+    if all(m.get('gpt2_targets') for m in parts):
+        gpt2 = sum(m['gpt2_targets'] for m in parts)
+        out.update(gpt2_targets=gpt2, loss_per_gpt2_token=nll / gpt2)
+    return out

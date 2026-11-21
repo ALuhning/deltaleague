@@ -136,7 +136,9 @@ def prepare(spec, work):
     if test:
         raw = fetch(test['url'], test['sha256'])
         # JSONL records end at '\n' only; str.splitlines() also breaks on U+2028 etc. inside text.
-        splits['test'] = [json.loads(line) for line in raw.decode().split('\n') if line.strip()]
+        from .bundle import domain_splits
+        docs = [json.loads(line) for line in raw.decode().split('\n') if line.strip()]
+        splits.update(domain_splits(docs, 'test'))
     return bundle, splits
 
 
