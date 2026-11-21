@@ -101,12 +101,21 @@ def scrubbed(launch, scrub):
     return wrapped
 
 
-def sandbox_smoke(spec, bundle):
-    """The locked-down runtime must start and see the GPU before any participant code runs."""
+SMOKE = 'import torch; x = torch.ones(256, 256, device="cuda"); assert float((x @ x).sum()) == 256 ** 3'
+
+
+def smoke_command(spec, bundle):
+    """The sandbox command with the runner replaced by a CUDA check: same image, flags and runtime."""
     sandbox = spec['sandbox']
     command = docker_command(sandbox['image'], bundle, 'delta-arch-smoke', runtime=sandbox.get('runtime'))
-    command[command.index('--entrypoint') + 2:] = ['-c', 'import torch; assert torch.cuda.is_available()']
-    result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=600)
+    image = command.index(sandbox['image'])
+    return command[:image + 1] + ['-c', SMOKE]
+
+
+def sandbox_smoke(spec, bundle):
+    """The locked-down runtime must start and run CUDA before any participant code runs."""
+    result = subprocess.run(smoke_command(spec, bundle), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            timeout=600)
     if result.returncode:
         raise RuntimeError('sandbox_unavailable')
 
