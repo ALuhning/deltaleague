@@ -73,4 +73,8 @@ The build is deterministic with no seeds; patch hashes should match the table.
 
 ## Submission
 
-Pending explicit approval per variant. IDs and verified results will be added here.
+Variant A: submission `d1f5f3eb-7124-4508-a7f6-2acbb9762bfd`, **rejected (`artifact_invalid`)**; no score.
+
+Cause, reproduced locally: the competition accepts edits only to tensors under `model.language_model.`. With that prefix, `delta_cli.artifacts.reconstruct(..., allowed_prefix="model.language_model.")` raises `frozen_tensor` for A, because A changes `lm_head.weight_scale`; it accepts C. Plain `delta validate` and reconstruction without the prefix both pass, so the rule is not visible to participants before upload.
+
+At 27B the output head is untied and outside the editable prefix. The output-logit half of the 0.8B recipe (Wait/Hmm ×0.5 and `</think>` ×1.3 on the logit rows) therefore cannot be expressed as an `lm_head` edit. Variant B has the same problem. Variant C (final norm only) is admissible.
