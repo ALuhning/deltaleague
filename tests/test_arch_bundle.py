@@ -95,7 +95,7 @@ def test_vm_worker_runs_harness_and_reports(honest, tmp_path):
         files.append({'name': path.name, 'url': path.as_uri(), 'sha256': hashlib.sha256(data).hexdigest(),
                       'size_bytes': len(data)})
     test = tmp_path / 'test.jsonl'
-    test.write_text(json.dumps({'text': 'private held-out text'}) + '\n')
+    test.write_text(json.dumps({'text': 'private held-out text\u2028with a separator'}, ensure_ascii=False) + '\n')
     spec = {'bundle': files, 'test': {'url': test.as_uri(), 'sha256': hashlib.sha256(test.read_bytes()).hexdigest()},
             'limits': {'audit_count': 10}, 'calibration_repeats': 2, 'min_matmul_tflops': 1}
     scrubs = []

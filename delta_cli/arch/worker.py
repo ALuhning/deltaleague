@@ -126,7 +126,8 @@ def prepare(spec, work):
     test = spec.get('test')
     if test:
         raw = fetch(test['url'], test['sha256'])
-        splits['test'] = [json.loads(line) for line in raw.decode().splitlines() if line.strip()]
+        # JSONL records end at '\n' only; str.splitlines() also breaks on U+2028 etc. inside text.
+        splits['test'] = [json.loads(line) for line in raw.decode().split('\n') if line.strip()]
     return bundle, splits
 
 
