@@ -23,3 +23,23 @@ Canonical identity is SHA-256 over canonical JSON identity metadata and sorted n
 Client requests use `Authorization: Bearer <delta-token>`. Request `/api/v1/upload-sessions` with the manifest, PUT bytes to returned URLs, then POST `/api/v1/submissions` with `upload_id`, `title`, and an `Idempotency-Key` header. Retrying a submission uses the same key and upload. Signed URLs are credentials; do not publish them. Single-object uploads support the first model; multipart/resumable uploads remain a launch-completion task.
 
 All metrics are JSON. Validation is the equally weighted mean of configured benchmark scores on a 0–100 scale. Private test is a single overall score. A missing score is null, never zero. Private example text and generations are not returned. Public validation can be downloaded through `/api/v1/evaluation-configs/<id>`.
+
+## Architecture-track bundles (`delta.submission.v2`)
+
+A bundle replaces the whole model: code, weights and tokenizer. See [ARCHITECTURE_TRACK.md](ARCHITECTURE_TRACK.md) for the runtime contract and how it is scored. Bundle code runs only inside the scoring sandbox; the server's verifier parses files without executing them.
+
+```json
+{
+  "schema_version": "delta.submission.v2",
+  "format": "bundle",
+  "model_config_id": "qwen35-08b-arch",
+  "parent_version_id": "optional UUID, lineage only",
+  "artifacts": [{"name": "delta_model.py", "sha256": "…", "size_bytes": 4096},
+                {"name": "model.safetensors", "sha256": "…", "size_bytes": 1700000000}]
+}
+```
+
+- **Files:** names are flat (`[A-Za-z0-9][A-Za-z0-9._-]*`), and `delta_model.py` is required.
+- **Suffixes:** allowed suffixes are `.py .safetensors .json .txt .model .tiktoken .jinja .md`.
+- **Limits:** at most 256 files and 1 MB of Python. Safetensors floating tensors must be finite.
+- **Identity:** content identity is SHA-256 over the sorted `(name, sha256, size_bytes)` inventory (`delta-bundle-v1`), namespaced by the track's model identity.

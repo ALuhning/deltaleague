@@ -38,9 +38,55 @@ def verify_artifact_bytes(directory, files):
     return digests
 
 
+BUNDLE_SCHEMA = "delta.submission.v2"
+BUNDLE_ENTRY = "delta_model.py"
+BUNDLE_SUFFIXES = (".py", ".safetensors", ".json", ".txt", ".model", ".tiktoken", ".jinja", ".md")
+BUNDLE_RESERVED = ("manifest.json", ".delta-upload.json")
+BUNDLE_MAX_FILES = 256
+BUNDLE_MAX_CODE_BYTES = 1024**2
+
+
+def validate_bundle_manifest(manifest):
+    """Architecture-track bundle: participant code, weights and tokenizer files, flat names."""
+    if manifest.get("format") != "bundle":
+        raise ValueError("unsupported_format")
+    if not re.fullmatch(r"[-a-zA-Z0-9_]{1,100}", str(manifest.get("model_config_id", ""))):
+        raise ValueError("invalid_model_config")
+    if manifest.get("parent_version_id") is not None:
+        try:
+            uuid.UUID(str(manifest["parent_version_id"]))
+        except ValueError:
+            raise ValueError("invalid_parent_version")
+    files = manifest.get("artifacts")
+    if not isinstance(files, list) or not files or len(files) > BUNDLE_MAX_FILES or not all(isinstance(f, dict) for f in files):
+        raise ValueError("invalid_artifact_inventory")
+    names = [f.get("name") for f in files]
+    for name in names:
+        if (not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", name)
+                or not name.endswith(BUNDLE_SUFFIXES) or name in BUNDLE_RESERVED):
+            raise ValueError("invalid_bundle_filename")
+    if len(set(names)) != len(names) or BUNDLE_ENTRY not in names:
+        raise ValueError("invalid_artifact_inventory")
+    for f in files:
+        if not re.fullmatch(r"[0-9a-f]{64}", str(f.get("sha256", ""))):
+            raise ValueError("invalid_hash")
+        if type(f.get("size_bytes")) is not int or f["size_bytes"] < 0:
+            raise ValueError("invalid_size")
+    if sum(f["size_bytes"] for f in files if f["name"].endswith(".py")) > BUNDLE_MAX_CODE_BYTES:
+        raise ValueError("bundle_code_too_large")
+
+
+def bundle_hash(files):
+    """Content identity of a bundle: its exact file inventory."""
+    inventory = sorted([f["name"], f["sha256"], f["size_bytes"]] for f in files)
+    return hashlib.sha256(canonical_json({"schema": "delta-bundle-v1", "files": inventory})).hexdigest()
+
+
 def validate_manifest(manifest):
     if not isinstance(manifest, dict):
         raise ValueError("invalid_manifest")
+    if manifest.get("schema_version") == BUNDLE_SCHEMA:
+        return validate_bundle_manifest(manifest)
     if manifest.get("schema_version") != "delta.submission.v1":
         raise ValueError("unsupported_schema")
     if manifest.get("format") not in ("sparse-diff", "dense-diff", "lora", "full"):
