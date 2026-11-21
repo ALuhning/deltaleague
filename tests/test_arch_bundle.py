@@ -127,3 +127,39 @@ def test_sandbox_smoke_command_keeps_image_and_lockdown(tmp_path):
     assert cmd[:real.index(image) + 1] == real[:real.index(image) + 1]
     assert cmd[-3:] == [image, '-c', SMOKE] and cmd[cmd.index('--entrypoint') + 1] == 'python3'
     assert '--network' in cmd and '--runtime' in cmd
+
+
+def test_worker_splits_test_documents_by_domain(honest, tmp_path):
+    import hashlib
+    from delta_cli.arch import worker
+    from delta_cli.arch.bundle import pooled
+    from delta_cli.arch.sandbox import local_launcher
+    files = [{'name': p.name, 'url': p.as_uri(), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest(),
+              'size_bytes': p.stat().st_size} for p in sorted(honest.iterdir())]
+    test = tmp_path / 'test.jsonl'
+    docs = [{'text': 'def f(x):\n    return x\n', 'domain': 'code', 'gpt2_targets': 9},
+            {'text': 'Theorem. Every prime p > 2 is odd.', 'domain': 'math', 'gpt2_targets': 12},
+            {'text': 'Another proof follows.', 'domain': 'math', 'gpt2_targets': 5}]
+    test.write_text(''.join(json.dumps(d) + '\n' for d in docs))
+    spec = {'bundle': files, 'test': {'url': test.as_uri(), 'sha256': hashlib.sha256(test.read_bytes()).hexdigest()},
+            'limits': {'audit_count': 10}}
+    out = worker.run(spec, tmp_path / 'work', launcher=local_launcher, probe=None, smoke=None, scrub=lambda: None)
+    assert out['status'] == 'complete', out
+    splits = out['result']['splits']
+    assert sorted(splits) == ['test/code', 'test/math'] and splits['test/math']['documents'] == 2
+    total = pooled(splits, 'test')
+    assert total['documents'] == 3 and total['gpt2_targets'] == 26
+    assert total['loss_per_gpt2_token'] == pytest.approx(
+        (splits['test/code']['nll_sum_nats'] + splits['test/math']['nll_sum_nats']) / 26)
+
+
+def test_bundle_check_reports_each_domain(honest, tmp_path):
+    docs = tmp_path / 'dev.jsonl'
+    docs.write_text(''.join(json.dumps({'text': t, 'domain': d, 'gpt2_targets': 4}) + '\n'
+                            for t, d in [('alpha beta', 'web'), ('x = 1', 'code'), ('gamma', 'web')]))
+    result = CliRunner().invoke(app, ['bundle', 'check', str(honest), '--docs', str(docs), '--device', 'cpu',
+                                      '--audits', '5'])
+    assert result.exit_code == 0, result.output
+    assert 'loss/GPT-2 token' in result.output.splitlines()[0]
+    assert any(l.strip().startswith('code ') for l in result.output.splitlines())
+    assert any(l.strip().startswith('web ') for l in result.output.splitlines())

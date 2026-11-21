@@ -394,16 +394,19 @@ def bundle_check(path: Path, docs: Path | None = typer.Option(None, help="JSONL 
     Local runs are not sandboxed and the runner may keep state between phases;
     official scoring uses fresh, network-less containers on a private test set.
     """
-    from .arch.bundle import load_docs, fineweb_docs
+    from .arch.bundle import domain_splits, load_docs, fineweb_docs, pooled
     from .arch.harness import ArchEvalError, ERRORS, Limits, evaluate
     from .arch.sandbox import local_launcher
     try:
-        documents = load_docs(docs, limit) if docs else fineweb_docs(limit)
+        documents = load_docs(docs) if docs else fineweb_docs(limit)
     except (OSError, ValueError) as exc:
         raise typer.BadParameter(str(exc)) from None
+    splits = domain_splits(documents, "validation")
+    if docs:  # --limit applies per domain, so every domain is represented.
+        splits = {k: v[:limit] for k, v in splits.items()}
     limits = Limits(time_limit_seconds=time_limit, audit_count=audits, flops_per_token_cap=flops_cap)
     try:
-        result = evaluate(local_launcher(path, device, stderr="inherit"), {"validation": documents}, limits)
+        result = evaluate(local_launcher(path, device, stderr="inherit"), splits, limits)
     except ArchEvalError as exc:
         if json_output:
             typer.echo(json.dumps({"error": exc.code, "detail": exc.detail, **exc.stats}, indent=2))
@@ -411,9 +414,14 @@ def bundle_check(path: Path, docs: Path | None = typer.Option(None, help="JSONL 
     if json_output:
         typer.echo(json.dumps(result, indent=2))
         return
-    split, audit = result["splits"]["validation"], result["audit"]
-    typer.echo(f"bits/byte {split['bits_per_byte']:.5f} · nats/token {split['nats_per_token']:.4f}"
-               + (f" · loss/GPT-2 token {split['loss_per_gpt2_token']:.4f}" if split.get("loss_per_gpt2_token") else ""))
+    split, audit = pooled(result["splits"], "validation"), result["audit"]
+    def line(m):
+        return (f"loss/GPT-2 token {m['loss_per_gpt2_token']:.4f} · " if m.get("loss_per_gpt2_token") else "") \
+            + f"bits/byte {m['bits_per_byte']:.5f} · nats/token {m['nats_per_token']:.4f}"
+    typer.echo(line(split))
+    if len(result["splits"]) > 1:
+        for name, m in result["splits"].items():
+            typer.echo(f"  {name.split('/', 1)[-1]:<14} {line(m)}")
     typer.echo(f"scored {split['targets']} tokens over {split['documents']} documents in {result['score_seconds']:.1f}s")
     typer.echo(f"audit {audit['count']} positions · max |dev| {audit['max_abs_deviation']:.2e} · "
                f"bias penalty {audit['penalty_nats_per_token']:.2e} nats/token")
