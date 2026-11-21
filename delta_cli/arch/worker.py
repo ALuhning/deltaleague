@@ -22,11 +22,16 @@ from .sandbox import docker_command, docker_launcher
 WORK = Path(os.environ.get('DELTA_ARCH_WORK', '/tmp/delta-arch'))
 
 
-def fetch(url, sha256=None, limit=64 * 1024**3):
+def fetch(url, sha256=None, limit=1024**3):
+    # Chunked: read(n) preallocates n bytes on HTTP and file responses.
+    chunks, size = [], 0
     with urllib.request.urlopen(url, timeout=600) as response:
-        data = response.read(limit + 1)
-    if len(data) > limit:
-        raise ValueError('download too large')
+        while chunk := response.read(8 << 20):
+            size += len(chunk)
+            if size > limit:
+                raise ValueError('download too large')
+            chunks.append(chunk)
+    data = b''.join(chunks)
     if sha256 and hashlib.sha256(data).hexdigest() != sha256:
         raise ValueError('download digest mismatch')
     return data
