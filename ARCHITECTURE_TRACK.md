@@ -1,6 +1,11 @@
 # Architecture track
 
-Change anything about the model (the weights, the architecture code and the tokenizer) and compete on **validation loss** under a fixed compute budget. The starting point is Qwen3.5 0.8B, packaged as a bundle (`delta_cli/arch/baseline/delta_model.py`).
+Change anything about the model (the weights, the architecture code and the tokenizer) and compete on **validation loss** under a fixed compute budget. The starting point is Qwen3.5 0.8B, packaged as a bundle.
+
+There are two templates:
+
+- **`vllm`** (`delta_cli/arch/baseline/delta_model.py`) is the official baseline: the released weights served by vLLM inside the sandbox. Its speed sets the time limit.
+- **`torch`** (`delta_model_hf.py`) is the same model in plain PyTorch/transformers. It is the place to start changing the architecture. It is slower than vLLM, so budget for optimizing your own implementation.
 
 ## Score
 
@@ -25,11 +30,17 @@ class Model:
     def decode(self, ids: list[int]) -> str: ...
     def token_logprobs(self, ids, targets):   # LongTensor[B,T] x2 -> FloatTensor[B,T]
         """log P(targets[b,t] | ids[b,:t+1]). Batches are right-padded with bos_id."""
+    def score_windows(self, inputs, targets): # optional; list[list[int]] x2 -> list[list[float]]
+        """Unpadded alternative to token_logprobs, for engines that batch internally."""
     def next_logits(self, ids):               # LongTensor[1,T] -> FloatTensor[1,V]
         """Unnormalized next-token logits after the last input position."""
 ```
 
 `delta_cli.arch.helpers.gather_logprobs` computes `token_logprobs` from hidden states without materializing full logits.
+
+### Exact audits
+
+The audit compares numbers computed for the same position in two different shapes: inside a long batched window during scoring, and as a prefix alone during the audit. Make your implementation give the same result regardless of batch composition and sequence length. Use deterministic, batch-invariant kernels, the way the baseline runs vLLM with `VLLM_BATCH_INVARIANT=1`. Small differences are tolerated, and any positive average is charged back to your score, so non-invariant numerics can only cost you.
 
 ## How scoring keeps everyone honest
 
@@ -56,7 +67,7 @@ Rejection codes: `load_timeout`, `time_limit_exceeded`, `audit_timeout`, `model_
 
 ```bash
 delta model pull <baseline-version-id> --output ./qwen        # weights, config, tokenizer
-delta bundle init ./mine --parent ./qwen                       # baseline delta_model.py + files
+delta bundle init ./mine --parent ./qwen                       # PyTorch template (--template vllm: the baseline)
 # ... edit ./mine/delta_model.py, retrain or convert weights ...
 delta bundle check ./mine --limit 200                          # same harness, FineWeb validation
 delta bundle build ./mine --model qwen35-08b-arch

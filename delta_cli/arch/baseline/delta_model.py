@@ -2,9 +2,9 @@
 
 Bundle layout: this file, the model's ``config.json`` and tokenizer files, and
 the released ``*.safetensors`` weights. vLLM scores whole windows with prompt
-log-probabilities. ``VLLM_BATCH_INVARIANT`` makes every position's numbers
-independent of batch composition and prefix length, so the audit's prefix-only
-recomputation reproduces the scoring run exactly.
+log-probabilities. vLLM 0.32 has no batch-invariant kernels for Gated DeltaNet
+layers, so the audit's prefix-only recomputation differs from scoring by small
+floating-point noise (charged back if it is positive on average).
 
 ``delta_model_hf.py`` is the same model in plain PyTorch/transformers, a
 starting point for architecture changes.
@@ -13,7 +13,6 @@ import json
 import os
 from pathlib import Path
 
-os.environ.setdefault('VLLM_BATCH_INVARIANT', '1')
 os.environ.setdefault('VLLM_NO_USAGE_STATS', '1')
 os.environ.setdefault('DO_NOT_TRACK', '1')
 
