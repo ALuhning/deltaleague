@@ -101,7 +101,8 @@ def test_vm_worker_runs_harness_and_reports(honest, tmp_path):
     scrubs = []
     out = worker.run(spec, tmp_path / 'work', launcher=local_launcher, probe=lambda: 5.0, smoke=None,
                      scrub=lambda: scrubs.append(1))
-    assert out['status'] == 'complete' and out['result']['splits']['test']['documents'] == 1
+    assert out['status'] == 'complete', out
+    assert out['result']['splits']['test']['documents'] == 1
     assert len(scrubs) == 2  # Before every audit runner (two calibration repeats).
     assert len(out['calibration']['score_seconds']) == 2
     slow = worker.run(spec, tmp_path / 'work2', launcher=local_launcher, probe=lambda: 0.5, smoke=None)
