@@ -1,6 +1,6 @@
 # Architecture track
 
-Change anything about the model (the weights, the architecture code and the tokenizer) and compete on **validation loss** under a fixed compute budget. The starting point is Qwen3.5 0.8B, packaged as a bundle.
+Change anything about the model (the weights, the architecture code and the tokenizer) and compete on **validation loss** under a fixed compute budget. The starting point is **Qwen3.5 0.8B Base** (`Qwen/Qwen3.5-0.8B-Base`, the pretrained checkpoint before post-training), packaged as a bundle.
 
 There are two templates:
 
@@ -40,7 +40,7 @@ class Model:
 
 ### Exact audits
 
-The audit compares numbers computed for the same position in two different shapes: inside a long batched window during scoring, and as a prefix alone during the audit. Make your implementation give the same result regardless of batch composition and sequence length. Use deterministic, batch-invariant kernels, the way the baseline runs vLLM with `VLLM_BATCH_INVARIANT=1`. Small differences are tolerated, and any positive average is charged back to your score, so non-invariant numerics can only cost you.
+The audit compares numbers computed for the same position in two different shapes: inside a long batched window during scoring, and as a prefix alone during the audit. Make your implementation give the same result regardless of batch composition and sequence length. Deterministic, batch-invariant kernels help. The vLLM baseline is deterministic and batch-invariant in practice, but its numerics depend on sequence length (audit drift std about 0.05 nats; vLLM's batch-invariant mode does not support Qwen3.5's linear-attention layers). Small differences like these are tolerated, and any positive average is charged back to your score, so non-invariant numerics can only cost you.
 
 ## How scoring keeps everyone honest
 
@@ -58,7 +58,7 @@ Under these rules the score is a true upper bound on the text's code length, wha
 ### Budgets
 
 - **Time:** phase A has a wall-clock limit of 1.2× the baseline's scoring time on the validation and test documents. It is measured on the official GPU (RTX 5090) with the weights already loaded; weight loading has its own cap.
-- **Compute:** a FLOPs-per-token cap (1.2× the baseline) is measured on a fixed probe with PyTorch's `FlopCounterMode`. Work launched outside the PyTorch dispatcher is not counted, so the time limit is the binding budget.
+- **Compute:** a FLOPs-per-token probe runs under PyTorch's `FlopCounterMode` and is reported. A cap (1.2× the baseline) applies only when the baseline's FLOPs are observable; the vLLM baseline runs in a separate engine process the counter cannot see, so the current board has no FLOPs cap and the time limit is the budget.
 - **Environment:** packages are exactly those in the pinned scoring image (`containers/arch.Dockerfile`). Nothing can be installed at scoring time.
 
 Rejection codes: `load_timeout`, `time_limit_exceeded`, `audit_timeout`, `model_error`, `protocol_error`, `invalid_contract`, `invalid_tokens`, `invalid_claims`, `audit_failed`, `roundtrip_failed`, `flops_exceeded`. Output from your code is never returned, because it could contain private text.
