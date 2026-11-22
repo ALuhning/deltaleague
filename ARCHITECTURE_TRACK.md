@@ -17,7 +17,7 @@ There are two templates:
   | `web` | English web pages from CC-MAIN-2026-43, filtered with the FineWeb recipe |
   | `multilingual` | Web pages in 12 languages (zh, es, ru, de, fr, ja, pt, ar, hi, ko, it, tr), FineWeb-2-style filtering |
   | `code` | Source files in 12 languages from permissively licensed GitHub repos created after July 2026 |
-  | `math` | Proofs from arXiv math papers (Oct–Nov 2026, LaTeX) and new Lean 4 files in mathlib4 |
+  | `math` | Proofs from arXiv math papers (Sep–Nov 2026, LaTeX) and new Lean 4 files in mathlib4 |
   | `literature` | Public-domain books newly released on Project Gutenberg |
   | `documents` | Federal Register documents, US court opinions and newly created Wikipedia articles |
   | `agentic` | GitHub pull requests that went through review and revision: description, review comments and revised diffs in time order |
