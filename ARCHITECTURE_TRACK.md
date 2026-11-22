@@ -10,7 +10,20 @@ There are two templates:
 ## Score
 
 - **Units:** both scores are **nats per GPT-2 token** (lower is better), the NanoGPT speedrun's units (its target is 3.28). The total negative log-likelihood of the text under your model is divided by the number of GPT-2 tokens the same text has (each document's tokens plus its closing end-of-text). Your tokenizer only changes the numerator, so any tokenizer competes fairly. Bits per byte is reported alongside; it ranks identically, because the two differ by a fixed factor per dataset.
-- **Leaderboard score:** the private held-out set of web documents. Its GPT-2 count is computed by the platform with the pinned GPT-2 tokenizer (`openai-community/gpt2` vocab and merges, no special tokens).
+- **Leaderboard score:** the private held-out set, pooled over eight domains: one loss over all of its text. Its GPT-2 count is computed by the platform with the pinned GPT-2 tokenizer (`openai-community/gpt2` vocab and merges, no special tokens). Each domain holds about 600k GPT-2 tokens (4.83M in total), so each one weighs about 1/8 of the score, and a model tuned only for web text can move at most that share of it:
+
+  | Domain | What it is |
+  |---|---|
+  | `web` | English web pages from CC-MAIN-2026-43, filtered with the FineWeb recipe |
+  | `multilingual` | Web pages in 12 languages (zh, es, ru, de, fr, ja, pt, ar, hi, ko, it, tr), FineWeb-2-style filtering |
+  | `code` | Source files in 12 languages from permissively licensed GitHub repos created after July 2026 |
+  | `math` | Proofs from arXiv math papers (Oct–Nov 2026, LaTeX) and new Lean 4 files in mathlib4 |
+  | `literature` | Public-domain books newly released on Project Gutenberg |
+  | `documents` | Federal Register documents, US court opinions and newly created Wikipedia articles |
+  | `agentic` | GitHub pull requests that went through review and revision: description, review comments and revised diffs in time order |
+  | `reasoning` | Long multi-step agent transcripts on terminal tasks (thought, command, output), and verified step-by-step competition-math solutions |
+
+  Everything is dated after the baseline's release, and all of it is plain UTF-8 text with no chat template. The result page shows the loss for each domain.
 - **Validation score:** the public FineWeb validation window used by the speedrun (the first 10,485,760 GPT-2 tokens of `fineweb_val_000000.bin`), so this number is directly comparable with speedrun results.
 - **Document framing:** each document is scored independently. Your model predicts every token of the document and then your `eos_id`. A document longer than `max_context` is split into windows, and each window restarts from `bos_id`.
 
