@@ -105,6 +105,19 @@ def test_vm_worker_runs_harness_and_reports(honest, tmp_path):
     assert out['result']['splits']['test']['documents'] == 1
     assert len(scrubs) == 2  # Before every audit runner (two calibration repeats).
     assert len(out['calibration']['score_seconds']) == 2
+    crash = tmp_path / 'crash'
+    crash.mkdir()
+    (crash / 'delta_model.py').write_text(HONEST.replace('def encode(self, text):',
+                                                        'def encode(self, text):\n        import sys; print("runner says hi", file=sys.stderr)\n        raise RuntimeError("boom")\n\n    def unused(self, text):'))
+    data = (crash / 'delta_model.py').read_bytes()
+    crashed = [{'name': 'delta_model.py', 'url': (crash / 'delta_model.py').as_uri(),
+                'sha256': hashlib.sha256(data).hexdigest(), 'size_bytes': len(data)}]
+    failed = worker.run({**spec, 'bundle': crashed}, tmp_path / 'work5', launcher=local_launcher, probe=None,
+                        smoke=None, scrub=None)
+    assert failed['status'] == 'rejected' and any('runner says hi' in line for line in failed['runner_log'])
+    single = worker.run({**spec, 'bundle': crashed, 'calibration_repeats': 1}, tmp_path / 'work6',
+                        launcher=local_launcher, probe=None, smoke=None, scrub=None)
+    assert single['status'] == 'rejected' and 'runner_log' not in single  # Participant runs keep no log.
     slow = worker.run(spec, tmp_path / 'work2', launcher=local_launcher, probe=lambda: 0.5, smoke=None)
     assert slow == {'status': 'infra_error', 'code': 'host_too_slow', 'matmul_tflops': 0.5}
     files[0]['sha256'] = '0' * 64
