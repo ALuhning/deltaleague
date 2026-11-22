@@ -22,6 +22,7 @@ from dataclasses import dataclass, asdict
 import math
 import random
 import secrets
+import subprocess
 import threading
 import time
 
@@ -103,8 +104,13 @@ class Runner:
         except (ProtocolError, OSError, ValueError) as exc:
             if self.expired:
                 raise ArchEvalError(self.expired) from None
-            code = 'model_error' if self.process.poll() not in (None, 0) else 'protocol_error'
-            raise ArchEvalError(code, type(exc).__name__) from None
+            try:  # A runner that died mid-frame may need a moment to be reaped.
+                rc = self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                rc = None
+            code = 'model_error' if rc not in (None, 0) else 'protocol_error'
+            # The exit status (e.g. 137: killed, often out of memory) carries no scored text.
+            raise ArchEvalError(code, type(exc).__name__ + ('' if rc is None else f' rc={rc}')) from None
         if header.get('op') == 'error':
             raise ArchEvalError('model_error', str(header.get('type', ''))[:100])
         return header, payload

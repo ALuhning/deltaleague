@@ -48,6 +48,7 @@ CHEATS = {
     'slow': 'def token_logprobs(self, ids, targets):\n    time.sleep(3)\n'
             '    return self.logits(ids).log_softmax(-1).gather(-1, targets[..., None])[..., 0]',
     'crash': 'def token_logprobs(self, ids, targets):\n    raise RuntimeError("secret text")',
+    'killed': 'def token_logprobs(self, ids, targets):\n    import os, signal\n    os.kill(os.getpid(), signal.SIGKILL)',
     'positive': 'def token_logprobs(self, ids, targets):\n    return torch.ones(targets.shape)',
     'chatty': 'def encode(self, text):\n    print("noise on stdout")\n    return list(text.encode())',
 }
@@ -109,6 +110,12 @@ def test_cheats_are_rejected(tmp_path, cheat, code):
         run(bundle(tmp_path, cheat, CHEATS[cheat]))
     assert exc.value.code == code
     assert 'secret' not in exc.value.detail
+
+
+def test_killed_runner_reports_exit_status(tmp_path):
+    with pytest.raises(ArchEvalError) as exc:
+        run(bundle(tmp_path, 'killed', CHEATS['killed']))
+    assert exc.value.code == 'model_error' and exc.value.detail == 'ProtocolError rc=-9'
 
 
 def test_time_limit_kills_runner(tmp_path):

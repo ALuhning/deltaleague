@@ -93,6 +93,14 @@ def scrub_gpu(reserve=256 * 1024**2):
     return size
 
 
+def runner_log_tail(path, lines=120, width=400):
+    try:
+        text = path.read_bytes()[-(1 << 20):].decode(errors='replace')
+    except OSError:
+        return []
+    return [line[:width] for line in text.splitlines()[-lines:]]
+
+
 def scrubbed(launch, scrub):
     def wrapped(phase):
         if phase == 'audit' and scrub:
@@ -155,18 +163,26 @@ def run(spec, work, launcher=None, probe=matmul_tflops, smoke=sandbox_smoke, scr
     except Exception as exc:
         return {'status': 'infra_error', 'code': str(exc) if str(exc) == 'sandbox_unavailable' else type(exc).__name__}
     sandbox = spec.get('sandbox', {})
-    launch = launcher(bundle) if launcher else docker_launcher(sandbox['image'], bundle, runtime=sandbox.get('runtime'))
+    repeats = max(1, int(spec.get('calibration_repeats', 1)))
+    # Calibration runs only the operator's baseline bundle, so its runner log may be kept for
+    # diagnosis. Participant runs never keep it: their stderr could echo scored text.
+    log = (work / 'runner.log').open('wb') if repeats > 1 else None
+    launch = launcher(bundle, stderr=log) if launcher else docker_launcher(sandbox['image'], bundle, stderr=log,
+                                                                           runtime=sandbox.get('runtime'))
     launch = scrubbed(launch, scrub)
     limits = Limits(**spec.get('limits', {}))
-    repeats = max(1, int(spec.get('calibration_repeats', 1)))
     timings, result = [], None
     try:
         for _ in range(repeats):
             result = evaluate(launch, splits, limits)
             timings.append(result['score_seconds'])
     except ArchEvalError as exc:
-        return {'status': 'rejected', 'code': exc.code, 'detail': exc.detail[:200], 'stats': exc.stats,
-                'matmul_tflops': tflops}
+        output = {'status': 'rejected', 'code': exc.code, 'detail': exc.detail[:200], 'stats': exc.stats,
+                  'matmul_tflops': tflops}
+        if log:
+            log.close()
+            output['runner_log'] = runner_log_tail(work / 'runner.log')
+        return output
     except Exception as exc:
         return {'status': 'infra_error', 'code': type(exc).__name__}
     output = {'status': 'complete', 'result': result, 'matmul_tflops': tflops}
