@@ -173,6 +173,7 @@ def test_bundle_check_reports_each_domain(honest, tmp_path):
     result = CliRunner().invoke(app, ['bundle', 'check', str(honest), '--docs', str(docs), '--device', 'cpu',
                                       '--audits', '5'])
     assert result.exit_code == 0, result.output
-    assert 'loss/GPT-2 token' in result.output.splitlines()[0]
+    first = result.output.splitlines()[0]
+    assert first.startswith('bits/byte ') and 'loss/GPT-2 token' in first
     assert any(l.strip().startswith('code ') for l in result.output.splitlines())
     assert any(l.strip().startswith('web ') for l in result.output.splitlines())

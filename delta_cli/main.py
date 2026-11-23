@@ -416,8 +416,8 @@ def bundle_check(path: Path, docs: Path | None = typer.Option(None, help="JSONL 
         return
     split, audit = pooled(result["splits"], "validation"), result["audit"]
     def line(m):
-        return (f"loss/GPT-2 token {m['loss_per_gpt2_token']:.4f} · " if m.get("loss_per_gpt2_token") else "") \
-            + f"bits/byte {m['bits_per_byte']:.5f} · nats/token {m['nats_per_token']:.4f}"
+        return f"bits/byte {m['bits_per_byte']:.5f} · nats/token {m['nats_per_token']:.4f}" \
+            + (f" · loss/GPT-2 token {m['loss_per_gpt2_token']:.4f}" if m.get("loss_per_gpt2_token") else "")
     typer.echo(line(split))
     if len(result["splits"]) > 1:
         for name, m in result["splits"].items():
