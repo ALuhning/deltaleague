@@ -118,6 +118,15 @@ def test_vm_worker_runs_harness_and_reports(honest, tmp_path):
     single = worker.run({**spec, 'bundle': crashed, 'calibration_repeats': 1}, tmp_path / 'work6',
                         launcher=local_launcher, probe=None, smoke=None, scrub=None)
     assert single['status'] == 'rejected' and 'runner_log' not in single  # Participant runs keep no log.
+    # Docker's own failure status (125) is the host's fault: retried as infrastructure, never a rejection.
+    (crash / 'delta_model.py').write_text(HONEST.replace('def encode(self, text):',
+                                                        'def encode(self, text):\n        import os; os._exit(125)\n\n    def unused(self, text):'))
+    data = (crash / 'delta_model.py').read_bytes()
+    runtime = [{**crashed[0], 'sha256': hashlib.sha256(data).hexdigest(), 'size_bytes': len(data)}]
+    infra = worker.run({**spec, 'bundle': runtime, 'calibration_repeats': 1}, tmp_path / 'work7',
+                       launcher=local_launcher, probe=None, smoke=None, scrub=None)
+    assert infra['status'] == 'infra_error' and infra['code'] == 'SandboxFailure' and 'runner_log' not in infra
+    assert isinstance(infra['host_log'], list)
     slow = worker.run(spec, tmp_path / 'work2', launcher=local_launcher, probe=lambda: 0.5, smoke=None)
     assert slow == {'status': 'infra_error', 'code': 'host_too_slow', 'matmul_tflops': 0.5}
     files[0]['sha256'] = '0' * 64

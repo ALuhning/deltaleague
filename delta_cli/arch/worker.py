@@ -9,6 +9,7 @@ text. The VM holds no platform credentials, only this job's expiring URLs.
 import hashlib
 import json
 import os
+import re
 import statistics
 import subprocess
 import sys
@@ -16,7 +17,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from .harness import ArchEvalError, Limits, evaluate
+from .harness import ArchEvalError, Limits, SandboxFailure, evaluate
 from .sandbox import docker_command, docker_launcher
 
 WORK = Path(os.environ.get('DELTA_ARCH_WORK', '/tmp/delta-arch'))
@@ -91,6 +92,19 @@ def scrub_gpu(reserve=256 * 1024**2):
     del block
     torch.cuda.empty_cache()
     return size
+
+
+HOST_LOG = re.compile(r'nvidia|NVRM|Xid|oom|out of memory|runsc|gvisor|docker|containerd', re.I)
+
+
+def host_log_tail(lines=40, width=300):
+    """Kernel messages about the GPU, memory and container runtime, for sandbox failures. Kernel
+    messages never contain the scored text."""
+    try:
+        text = subprocess.run(['dmesg', '--ctime'], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return [line[:width] for line in text.splitlines() if HOST_LOG.search(line)][-lines:]
 
 
 def runner_log_tail(path, lines=120, width=400):
@@ -183,8 +197,14 @@ def run(spec, work, launcher=None, probe=matmul_tflops, smoke=sandbox_smoke, scr
             log.close()
             output['runner_log'] = runner_log_tail(work / 'runner.log')
         return output
-    except Exception as exc:
-        return {'status': 'infra_error', 'code': type(exc).__name__}
+    except Exception as exc:  # Includes SandboxFailure: the container runtime, not the model, failed.
+        output = {'status': 'infra_error', 'code': type(exc).__name__, 'matmul_tflops': tflops}
+        if isinstance(exc, SandboxFailure):
+            output['host_log'] = host_log_tail()
+        if log:
+            log.close()
+            output['runner_log'] = runner_log_tail(work / 'runner.log')
+        return output
     output = {'status': 'complete', 'result': result, 'matmul_tflops': tflops}
     if repeats > 1:
         output['calibration'] = {'score_seconds': timings, 'median_score_seconds': statistics.median(timings)}

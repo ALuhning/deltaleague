@@ -49,6 +49,7 @@ CHEATS = {
             '    return self.logits(ids).log_softmax(-1).gather(-1, targets[..., None])[..., 0]',
     'crash': 'def token_logprobs(self, ids, targets):\n    raise RuntimeError("secret text")',
     'killed': 'def token_logprobs(self, ids, targets):\n    import os, signal\n    os.kill(os.getpid(), signal.SIGKILL)',
+    'runtime': 'def token_logprobs(self, ids, targets):\n    import os\n    os._exit(125)',
     'positive': 'def token_logprobs(self, ids, targets):\n    return torch.ones(targets.shape)',
     'chatty': 'def encode(self, text):\n    print("noise on stdout")\n    return list(text.encode())',
 }
@@ -116,6 +117,12 @@ def test_killed_runner_reports_exit_status(tmp_path):
     with pytest.raises(ArchEvalError) as exc:
         run(bundle(tmp_path, 'killed', CHEATS['killed']))
     assert exc.value.code == 'model_error' and exc.value.detail == 'ProtocolError rc=-9'
+
+
+def test_container_runtime_failure_is_not_a_model_error(tmp_path):
+    from delta_cli.arch.harness import SandboxFailure
+    with pytest.raises(SandboxFailure):
+        run(bundle(tmp_path, 'runtime', CHEATS['runtime']))
 
 
 def test_time_limit_kills_runner(tmp_path):
