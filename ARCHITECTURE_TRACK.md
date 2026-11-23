@@ -9,8 +9,8 @@ There are two templates:
 
 ## Score
 
-- **Units:** both scores are **nats per GPT-2 token** (lower is better), the NanoGPT speedrun's units (its target is 3.28). The total negative log-likelihood of the text under your model is divided by the number of GPT-2 tokens the same text has (each document's tokens plus its closing end-of-text). Your tokenizer only changes the numerator, so any tokenizer competes fairly. Bits per byte is reported alongside; it ranks identically, because the two differ by a fixed factor per dataset.
-- **Leaderboard score:** the private held-out set, pooled over eight domains: one loss over all of its text. Its GPT-2 count is computed by the platform with the pinned GPT-2 tokenizer (`openai-community/gpt2` vocab and merges, no special tokens). Each domain holds about 600k GPT-2 tokens (4.83M in total), so each one weighs about 1/8 of the score, and a model tuned only for web text can move at most that share of it:
+- **Units:** both scores are **bits per byte** (lower is better): the total negative log-likelihood of the text under your model, in bits, divided by the text's UTF-8 bytes. The numerator includes predicting each document's end. Bytes are a property of the text alone, so any tokenizer competes fairly, and the numbers compare directly with other bits-per-byte results on the same text. Nats per GPT-2 token (the NanoGPT speedrun's units, target 3.28) is also reported for FineWeb validation; on a fixed dataset it differs from bits per byte by a constant factor, so it ranks identically. Configs `1b-arch-v3` and `1b-arch-v4` used it as the board unit.
+- **Leaderboard score:** the private held-out set, pooled over eight domains: total bits over total bytes of all its text (14.8 MB), which is the byte-weighted mean of the per-domain scores. Each domain is sized to about 600k GPT-2 tokens, which gives byte shares from 9% (code, multilingual) to 18% (web). A model tuned only for web text can move at most that share of the score:
 
   | Domain | What it is |
   |---|---|
@@ -23,8 +23,8 @@ There are two templates:
   | `agentic` | GitHub pull requests that went through review and revision: description, review comments and revised diffs in time order |
   | `reasoning` | Long multi-step agent transcripts on terminal tasks (thought, command, output), and verified step-by-step competition-math solutions |
 
-  Everything is dated after the baseline's release, and all of it is plain UTF-8 text with no chat template. The result page shows the loss for each domain.
-- **Validation score:** the public FineWeb validation window used by the speedrun (the first 10,485,760 GPT-2 tokens of `fineweb_val_000000.bin`), so this number is directly comparable with speedrun results.
+  Everything is dated after the baseline's release, and all of it is plain UTF-8 text with no chat template. The result page shows bits per byte for each domain, and `delta bundle check --docs your.jsonl` reports it per domain for documents that carry a `domain` field.
+- **Validation score:** the public FineWeb validation window used by the speedrun (the first 10,485,760 GPT-2 tokens of `fineweb_val_000000.bin`), scored in bits per byte like the leaderboard score. Its nats per GPT-2 token is shown alongside, and is directly comparable with speedrun results.
 - **Document framing:** each document is scored independently. Your model predicts every token of the document and then your `eos_id`. A document longer than `max_context` is split into windows, and each window restarts from `bos_id`.
 
 ## Bundle contract
