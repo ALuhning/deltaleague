@@ -28,6 +28,12 @@ import time
 
 from .protocol import PROTOCOL, ProtocolError, read_frame, write_frame, pack_ints, unpack_ints, split
 
+SANDBOX_FAILED = 125  # `docker run`: the daemon or runtime failed, before or around the container.
+
+
+class SandboxFailure(RuntimeError):
+    """Not an ArchEvalError: the worker reports it as an infrastructure error, which is retried."""
+
 CONTRACT = ('vocab_size', 'bos_id', 'eos_id', 'max_context')
 ERRORS = {
     'load_timeout': 'The model did not become ready within the load limit.',
@@ -104,10 +110,7 @@ class Runner:
         except (ProtocolError, OSError, ValueError) as exc:
             if self.expired:
                 raise ArchEvalError(self.expired) from None
-            try:  # A runner that died mid-frame may need a moment to be reaped.
-                rc = self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                rc = None
+            rc = self.exit_status()
             code = 'model_error' if rc not in (None, 0) else 'protocol_error'
             # The exit status (e.g. 137: killed, often out of memory) carries no scored text.
             raise ArchEvalError(code, type(exc).__name__ + ('' if rc is None else f' rc={rc}')) from None
@@ -121,8 +124,20 @@ class Runner:
         except (OSError, ValueError):
             if self.expired:
                 raise ArchEvalError(self.expired) from None
-            raise ArchEvalError('model_error', 'runner exited') from None
+            rc = self.exit_status()
+            raise ArchEvalError('model_error', 'runner exited' + ('' if rc is None else f' rc={rc}')) from None
         return self.receive()
+
+    def exit_status(self):
+        """The runner's exit status once it has died, or None if it is still running. Docker exits
+        with 125 when the container runtime itself fails; that is the host's fault, not the model's."""
+        try:  # A runner that died mid-frame may need a moment to be reaped.
+            rc = self.process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            return None
+        if rc == SANDBOX_FAILED:
+            raise SandboxFailure(f'container runtime failed (rc={rc})')
+        return rc
 
     def ready(self, limits):
         header, _ = self.receive()
