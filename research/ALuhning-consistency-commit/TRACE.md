@@ -189,3 +189,11 @@ Paired local scores on the 8 completed benchmarks (single sample each; ±~6 poin
 | mean of 8 | | 47.80 | 50.54 | +2.74 |
 
 The ifeval drop (6 of 64 prompts) is a possible regression in instruction following and is reported as such.
+
+## 12. Verified result
+
+Submitted once with `--pr` #109 (submission `b94b64fe-1aac-4394-b7fa-6a7be1d3f8b0`, version `15049dff…`).
+Platform, same config as the original: private test 17.40 ± 1.20 -> 20.40 ± 1.27 (+3.0, not separable by the
+board's 1.96·√(se² + se²) ≈ 3.4 band); validation 40.29 -> 41.99 (+1.70); math500 +14.1, gsm8k +7.8,
+bfcl single +6.9, ifeval +4.7, bbh −5.6, bfcl multi −3.1. Rank 91 -> 89 of 97. The local held-out estimate
+(+27.3 on training-split maths) did not transfer at that size to the mixed private test.

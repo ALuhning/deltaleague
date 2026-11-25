@@ -91,7 +91,45 @@ The **ifeval drop (−9.4, 6 of 64 prompts)** is a possible regression in instru
 
 ## Submission
 
-Pending maintainer review and the submitter's approval. The submission URL and verified validation and private-test scores will be added here once available.
+- Submission: [`b94b64fe-1aac-4394-b7fa-6a7be1d3f8b0`](https://deltaleague.ai/submissions/b94b64fe-1aac-4394-b7fa-6a7be1d3f8b0/), version `15049dff-7d2c-4537-aef1-e6f324a0ebb1`, parent `0ea62f40` (Original model), config `private1000-v6-thinking8k-20261111`.
+- **Verified (platform) scores, same evaluation config as the original:**
+
+| | original | this submission | diff |
+|---|---|---|---|
+| private test | 17.40 ± 1.20 | **20.40 ± 1.27** | +3.0 |
+| validation (18 benchmarks) | 40.29 | **41.99** | +1.70 |
+| leaderboard rank | 91 | 89 (of 97) | |
+
+- The +3.0 private-test gain is below the leaderboard's independence-based band (1.96·√(1.27² + 1.20²) ≈ 3.4), so it is **not established** as a separation from the original.
+- Verified validation by benchmark (each benchmark 32–114 items):
+
+| benchmark | original | submission | diff |
+|---|---|---|---|
+| arc_challenge | 32.8 | 34.4 | +1.6 |
+| arc_easy | 64.1 | 62.5 | -1.6 |
+| bbh | 22.2 | 16.7 | -5.6 |
+| bfcl_multi_turn | 3.1 | 0.0 | -3.1 |
+| bfcl_single_turn | 48.6 | 55.6 | +6.9 |
+| boolq | 65.6 | 64.1 | -1.6 |
+| commonsense_qa | 57.8 | 57.8 | +0.0 |
+| gsm8k | 51.6 | 59.4 | +7.8 |
+| hellaswag | 46.9 | 46.9 | +0.0 |
+| humaneval | 15.6 | 15.6 | +0.0 |
+| ifeval | 57.8 | 62.5 | +4.7 |
+| math500 | 20.3 | 34.4 | +14.1 |
+| mbpp | 9.4 | 12.5 | +3.1 |
+| mmlu | 47.4 | 45.6 | -1.8 |
+| mmlu_pro | 25.7 | 28.6 | +2.9 |
+| openbookqa | 29.7 | 31.2 | +1.6 |
+| piqa | 70.3 | 70.3 | +0.0 |
+| winogrande | 56.2 | 57.8 | +1.6 |
+
+**Local vs verified.**
+- The local held-out estimate (+27.3 points on gsm8k/MATH training-split problems) greatly overstated the private-test effect (+3.0).
+- On the platform the gains concentrate where the held-out set lived: math500 +14.1, gsm8k +7.8, bfcl single-turn +6.9.
+- Most other benchmarks moved within noise; bbh and bfcl multi-turn fell.
+- The local ifeval drop (−9.4) did not reproduce: verified ifeval rose +4.7, so it was likely noise.
+- The private test mixes many task types, and the commit habit was learned from gsm8k only.
 
 ## Boundaries
 
