@@ -47,4 +47,6 @@ On the same 96-item development set the candidate scored 47/96 against 39/96 for
 
 ## Submission
 
-The exact dense replacement patch modifies 151 tensors. Delta reconstruction was checked bit for bit against the evaluated checkpoint. Array values and signed upload URLs are kept out of this PR. Official scoring is pending submission.
+The exact dense replacement patch modifies 151 tensors. Delta reconstruction was checked bit for bit against the evaluated checkpoint. Array values and signed upload URLs are kept out of this PR.
+
+[Delta League submission](https://deltaleague.ai/submissions/b2d0dc5f-b1c0-4538-8d5a-689f8bf326cc/) verified on November 28, 2026. The official private test score was **29.2** (standard error **1.44**) and official public validation was **46.14**. The entry ranked **83rd of 99** at the time of the check. Round one scored **20.4** private and **41.99** validation. The original scored **17.4** private and **40.29** validation.
